@@ -7,6 +7,36 @@ from openai import OpenAI
 
 def evaluate_added_item(item):
     """Validate one seller-submitted food item and return an approval decision."""
+
+    # Days left is a whole-day value in JimatRasa. Validate it in Python before
+    # sending the item to the AI evaluator so fractional values such as 2.5 are
+    # never treated as valid expiry periods.
+    raw_days_left = item.get("days_left")
+    try:
+        numeric_days_left = float(raw_days_left)
+    except (TypeError, ValueError):
+        return {
+            "status": "CANCELED",
+            "reason": "Days left to expiry must be an integer between 1 and 7.",
+        }
+
+    if not numeric_days_left.is_integer():
+        return {
+            "status": "CANCELED",
+            "reason": "Days left to expiry must be an integer between 1 and 7.",
+        }
+
+    days_left = int(numeric_days_left)
+    if not 1 <= days_left <= 7:
+        return {
+            "status": "CANCELED",
+            "reason": "Days left to expiry must be an integer between 1 and 7.",
+        }
+
+    # Keep the normalized integer on the item so downstream pricing and database
+    # code receive the same validated value that the evaluator reviewed.
+    item["days_left"] = days_left
+
     rules = f"""You are an automated review agent evaluating a registered food item entry for a surplus food management system in Malaysia.
 
 Item Data to Review:
@@ -14,7 +44,7 @@ Item Data to Review:
 - Category: {item['category']}
 - Quantity (kg/units): {item['quantity']}
 - Original Price (MYR): {item['original_price']}
-- Days Left to Expiry: {item['days_left']}
+- Days Left to Expiry: {days_left}
 - Cosmetic Grade: {item['grade']}
 
 Validation Rules:
